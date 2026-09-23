@@ -8,14 +8,40 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app import models, schemas
+from app.auth import require_api_key
 from app.database import get_db
 from app.services.ai_service import analyze_incident
+from app.services.rag_service import retrieve_incident_evidence
 
 
 router = APIRouter(
     prefix="/incidents",
-    tags=["Incidents"]
+    tags=["Incidents"],
+    dependencies=[
+        Depends(require_api_key)
+    ]
 )
+
+
+def find_incident(
+    incident_id: int,
+    db: Session
+):
+    incident = (
+        db.query(models.Incident)
+        .filter(
+            models.Incident.id == incident_id
+        )
+        .first()
+    )
+
+    if incident is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found"
+        )
+
+    return incident
 
 
 @router.post(
@@ -40,18 +66,20 @@ def create_incident(
 
 @router.get(
     "",
-    response_model=list[schemas.IncidentResponse]
+    response_model=list[
+        schemas.IncidentResponse
+    ]
 )
 def get_incidents(
     db: Session = Depends(get_db)
 ):
-    incidents = (
+    return (
         db.query(models.Incident)
-        .order_by(models.Incident.created_at.desc())
+        .order_by(
+            models.Incident.created_at.desc()
+        )
         .all()
     )
-
-    return incidents
 
 
 @router.get(
@@ -62,21 +90,10 @@ def get_incident(
     incident_id: int,
     db: Session = Depends(get_db)
 ):
-    incident = (
-        db.query(models.Incident)
-        .filter(
-            models.Incident.id == incident_id
-        )
-        .first()
+    return find_incident(
+        incident_id,
+        db
     )
-
-    if incident is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Incident not found"
-        )
-
-    return incident
 
 
 @router.patch(
@@ -88,22 +105,15 @@ def update_incident(
     incident_update: schemas.IncidentUpdate,
     db: Session = Depends(get_db)
 ):
-    incident = (
-        db.query(models.Incident)
-        .filter(
-            models.Incident.id == incident_id
-        )
-        .first()
+    incident = find_incident(
+        incident_id,
+        db
     )
 
-    if incident is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Incident not found"
+    update_data = (
+        incident_update.model_dump(
+            exclude_unset=True
         )
-
-    update_data = incident_update.model_dump(
-        exclude_unset=True
     )
 
     for field, value in update_data.items():
@@ -127,24 +137,36 @@ def delete_incident(
     incident_id: int,
     db: Session = Depends(get_db)
 ):
-    incident = (
-        db.query(models.Incident)
-        .filter(
-            models.Incident.id == incident_id
-        )
-        .first()
+    incident = find_incident(
+        incident_id,
+        db
     )
-
-    if incident is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Incident not found"
-        )
 
     db.delete(incident)
     db.commit()
 
     return None
+
+
+@router.get(
+    "/{incident_id}/evidence",
+    response_model=list[
+        schemas.EvidenceItem
+    ]
+)
+def get_incident_evidence(
+    incident_id: int,
+    db: Session = Depends(get_db)
+):
+    incident = find_incident(
+        incident_id,
+        db
+    )
+
+    return retrieve_incident_evidence(
+        incident,
+        top_k=3
+    )
 
 
 @router.post(
@@ -156,19 +178,10 @@ def analyze_incident_endpoint(
     incident_id: int,
     db: Session = Depends(get_db)
 ):
-    incident = (
-        db.query(models.Incident)
-        .filter(
-            models.Incident.id == incident_id
-        )
-        .first()
+    incident = find_incident(
+        incident_id,
+        db
     )
-
-    if incident is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Incident not found"
-        )
 
     analysis_data = analyze_incident(
         incident
@@ -187,28 +200,23 @@ def analyze_incident_endpoint(
 
 @router.get(
     "/{incident_id}/analyses",
-    response_model=list[schemas.AIAnalysisResponse]
+    response_model=list[
+        schemas.AIAnalysisResponse
+    ]
 )
 def get_incident_analyses(
     incident_id: int,
     db: Session = Depends(get_db)
 ):
-    incident = (
-        db.query(models.Incident)
-        .filter(
-            models.Incident.id == incident_id
-        )
-        .first()
+    find_incident(
+        incident_id,
+        db
     )
 
-    if incident is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Incident not found"
+    return (
+        db.query(
+            models.IncidentAnalysis
         )
-
-    analyses = (
-        db.query(models.IncidentAnalysis)
         .filter(
             models.IncidentAnalysis.incident_id
             == incident_id
@@ -218,5 +226,3 @@ def get_incident_analyses(
         )
         .all()
     )
-
-    return analyses

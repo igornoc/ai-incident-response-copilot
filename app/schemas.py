@@ -11,7 +11,6 @@ Severity = Literal[
     "critical"
 ]
 
-
 IncidentStatus = Literal[
     "open",
     "investigating",
@@ -76,6 +75,13 @@ class AIAnalysisResponse(BaseModel):
     )
 
 
+class EvidenceItem(BaseModel):
+    source: str
+    section: str
+    score: float
+    content: str
+
+
 class WebhookIncidentCreate(BaseModel):
     source: str = Field(
         min_length=2,
@@ -97,7 +103,6 @@ class WebhookIncidentCreate(BaseModel):
     )
 
     severity: Severity
-
     auto_analyze: bool = True
 
 

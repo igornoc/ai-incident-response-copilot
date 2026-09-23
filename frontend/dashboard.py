@@ -18,6 +18,20 @@ WEBHOOK_SECRET = os.getenv(
     ""
 )
 
+APP_API_KEY = os.getenv(
+    "APP_API_KEY",
+    ""
+)
+
+
+def auth_headers():
+    if not APP_API_KEY:
+        return {}
+
+    return {
+        "X-API-Key": APP_API_KEY
+    }
+
 
 st.set_page_config(
     page_title="AI Incident Copilot",
@@ -52,10 +66,17 @@ def api_post(
     timeout=120
 ):
     try:
+        request_headers = auth_headers()
+
+        if headers:
+            request_headers.update(
+                headers
+            )
+
         response = requests.post(
             f"{API_URL}{path}",
             json=payload,
-            headers=headers,
+            headers=request_headers,
             timeout=timeout
         )
 
@@ -433,6 +454,53 @@ with tab_workspace:
 
                         st.rerun()
 
+
+            st.divider()
+
+            st.subheader(
+                "📚 Retrieved Evidence"
+            )
+
+            st.caption(
+                "Relevant internal runbook sections "
+                "retrieved for this incident."
+            )
+
+            evidence = api_get(
+                f"/incidents/{incident_id}/evidence"
+            )
+
+            if evidence:
+                for index, item in enumerate(
+                    evidence,
+                    start=1
+                ):
+                    relevance = round(
+                        item["score"] * 100,
+                        1
+                    )
+
+                    with st.expander(
+                        f"Evidence {index}: "
+                        f"{item['section']} "
+                        f"({relevance}% match)"
+                    ):
+                        st.markdown(
+                            f"**Source:** `{item['source']}`"
+                        )
+
+                        st.write(
+                            item["content"]
+                        )
+
+                        st.caption(
+                            f"Retrieval score: "
+                            f"{item['score']}"
+                        )
+            else:
+                st.info(
+                    "No relevant internal evidence found."
+                )
 
             st.divider()
 

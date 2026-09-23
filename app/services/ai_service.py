@@ -5,28 +5,31 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from app.models import Incident
+from app.services.rag_service import retrieve_incident_evidence
 
 
 load_dotenv(dotenv_path=".env")
 
 
 SYSTEM_INSTRUCTIONS = """
-You are an incident-response copilot for software, APIs,
-cloud infrastructure, and SaaS systems.
+You are an incident-response copilot for software,
+API, cloud infrastructure, and SaaS incidents.
 
-Analyze incidents conservatively.
+You may receive internal troubleshooting documentation.
 
 Rules:
 
-1. Use only the incident information provided.
-2. Do not invent logs, metrics, deployments, dependencies,
+1. Use only the supplied incident information and retrieved evidence.
+2. Treat runbooks as troubleshooting guidance, not proof.
+3. Never claim a root cause is confirmed without direct evidence.
+4. Do not invent logs, metrics, traces, deployments, dependencies,
    infrastructure, or events.
-3. Treat root causes as hypotheses unless the evidence confirms them.
-4. Give practical troubleshooting steps in a useful order.
-5. Prefer evidence gathering and reversible actions first.
-6. Avoid destructive actions unless clearly justified.
-7. Confidence must be between 0 and 1.
-8. Lower confidence when evidence is limited.
+5. Clearly distinguish known facts from hypotheses.
+6. Prefer evidence gathering and reversible actions first.
+7. Give troubleshooting steps in a useful investigation order.
+8. Confidence must be between 0 and 1.
+9. Keep confidence conservative when direct telemetry is missing.
+10. Mention relevant runbook filenames when useful.
 """
 
 
@@ -76,10 +79,45 @@ def get_openai_client() -> OpenAI:
     )
 
 
+def format_evidence(
+    evidence: list[dict]
+) -> str:
+    if not evidence:
+        return (
+            "No relevant internal evidence "
+            "was retrieved."
+        )
+
+    sections = []
+
+    for number, item in enumerate(
+        evidence,
+        start=1
+    ):
+        sections.append(
+            f"""
+EVIDENCE {number}
+
+Source:
+{item["source"]}
+
+Section:
+{item["section"]}
+
+Retrieval relevance:
+{item["score"]}
+
+Content:
+{item["content"]}
+"""
+        )
+
+    return "\n".join(sections)
+
+
 def analyze_incident(
     incident: Incident
 ) -> dict:
-
     client = get_openai_client()
 
     model = os.getenv(
@@ -87,8 +125,17 @@ def analyze_incident(
         "gpt-5.6-luna"
     )
 
-    incident_context = f"""
-Analyze this software incident.
+    evidence = retrieve_incident_evidence(
+        incident,
+        top_k=3
+    )
+
+    evidence_text = format_evidence(
+        evidence
+    )
+
+    prompt = f"""
+INCIDENT
 
 Incident ID:
 {incident.id}
@@ -105,21 +152,38 @@ Severity:
 Status:
 {incident.status}
 
-Tasks:
 
-1. Summarize the incident.
-2. Identify the most plausible root-cause hypothesis.
-3. Give a confidence value between 0 and 1.
-4. Provide ordered troubleshooting steps.
-5. Recommend the safest next action.
+RETRIEVED INTERNAL EVIDENCE
 
-Do not invent evidence that was not provided.
+{evidence_text}
+
+
+TASK
+
+Analyze the incident using the incident information
+and the retrieved documentation.
+
+The documentation describes possible failure modes
+and investigation procedures.
+
+It does NOT prove that those failure modes are
+actually occurring in this incident.
+
+Return:
+
+1. A concise incident summary.
+2. The most plausible root-cause hypothesis.
+3. A confidence value between 0 and 1.
+4. Ordered troubleshooting steps.
+5. The safest recommended next action.
+
+Reference useful runbook filenames when appropriate.
 """
 
     response = client.responses.create(
         model=model,
         instructions=SYSTEM_INSTRUCTIONS,
-        input=incident_context,
+        input=prompt,
         text={
             "format": {
                 "type": "json_schema",
@@ -156,9 +220,13 @@ Do not invent evidence that was not provided.
         ),
         "confidence": confidence,
         "troubleshooting_steps": (
-            analysis["troubleshooting_steps"]
+            analysis[
+                "troubleshooting_steps"
+            ]
         ),
         "recommended_action": (
-            analysis["recommended_action"]
+            analysis[
+                "recommended_action"
+            ]
         )
     }
