@@ -12,6 +12,7 @@ from app import models, schemas
 from app.database import get_db
 from app.services.ai_service import analyze_incident
 from app.services.webhook_service import verify_webhook_secret
+from app.services.slack_service import send_incident_alert
 
 
 router = APIRouter(
@@ -129,6 +130,16 @@ def receive_incident_webhook(
         db.add(saved_analysis)
         db.commit()
         db.refresh(saved_analysis)
+
+        try:
+            send_incident_alert(
+                incident,
+                saved_analysis
+            )
+        except Exception as exc:
+            print(
+                f"Slack notification failed: {exc}"
+            )
 
     return schemas.WebhookIngestResponse(
         duplicate=False,

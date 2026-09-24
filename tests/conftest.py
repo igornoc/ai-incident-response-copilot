@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 os.environ["APP_API_KEY"] = "test-api-key"
 os.environ["WEBHOOK_SECRET"] = "test-webhook-secret"
+os.environ["SLACK_ALERTS_ENABLED"] = "false"
 
 from app.database import Base, get_db
 from app.main import app

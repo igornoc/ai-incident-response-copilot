@@ -137,13 +137,85 @@ def status_icon(status):
     )
 
 
-st.title(
-    "🚨 AI Incident Copilot"
-)
+st.markdown(
+    """
+    <style>
+        .block-container {
+            padding-top: 4rem;
+            padding-bottom: 3rem;
+            max-width: 1500px;
+        }
 
-st.caption(
-    "AI-powered incident triage, "
-    "investigation and troubleshooting"
+        .hero-title {
+            display: block;
+            font-size: 2.35rem;
+            font-weight: 750;
+            line-height: 1.45;
+            padding: 0.65rem 0 0.35rem 0;
+            margin: 0 0 0.15rem 0;
+            overflow: visible;
+            position: relative;
+        }
+
+        .hero-subtitle {
+            font-size: 1.05rem;
+            line-height: 1.5;
+            color: #9ca3af;
+            margin-top: 0.15rem;
+            margin-bottom: 1rem;
+        }
+
+        .tech-strip {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.5rem;
+            padding-top: 0.15rem;
+            padding-bottom: 0.2rem;
+            margin-bottom: 1.4rem;
+        }
+
+        .tech-pill {
+            padding: 0.28rem 0.7rem;
+            border: 1px solid #3b4252;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            color: #cbd5e1;
+            background: #171b22;
+        }
+
+        div[data-testid="stMetric"] {
+            background: #151922;
+            border: 1px solid #292f3b;
+            padding: 1rem;
+            border-radius: 12px;
+        }
+
+        div[data-testid="stExpander"] {
+            border: 1px solid #292f3b;
+            border-radius: 10px;
+        }
+    </style>
+
+    <div class="hero-title">
+        🚨 AI Incident Response Copilot
+    </div>
+
+    <div class="hero-subtitle">
+        Evidence-grounded incident triage, diagnosis,
+        and response orchestration
+    </div>
+
+    <div class="tech-strip">
+        <span class="tech-pill">FastAPI</span>
+        <span class="tech-pill">RAG</span>
+        <span class="tech-pill">OpenAI</span>
+        <span class="tech-pill">Webhooks</span>
+        <span class="tech-pill">Docker</span>
+        <span class="tech-pill">Slack Alerts</span>
+    </div>
+    """,
+    unsafe_allow_html=True
 )
 
 
@@ -294,6 +366,29 @@ with tab_workspace:
         )
 
     else:
+
+        st.subheader("Incident Queue")
+
+        table_data = []
+
+        for item in filtered:
+            table_data.append(
+                {
+                    "ID": item["id"],
+                    "Title": item["title"],
+                    "Severity": item["severity"].upper(),
+                    "Status": item["status"].upper(),
+                    "Created": item["created_at"]
+                }
+            )
+
+        st.dataframe(
+            table_data,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.markdown("### Incident Details")
 
         options = {}
 

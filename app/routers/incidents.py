@@ -12,6 +12,7 @@ from app.auth import require_api_key
 from app.database import get_db
 from app.services.ai_service import analyze_incident
 from app.services.rag_service import retrieve_incident_evidence
+from app.services.slack_service import send_incident_alert
 
 
 router = APIRouter(
@@ -194,6 +195,16 @@ def analyze_incident_endpoint(
     db.add(db_analysis)
     db.commit()
     db.refresh(db_analysis)
+
+    try:
+        send_incident_alert(
+            incident,
+            db_analysis
+        )
+    except Exception as exc:
+        print(
+            f"Slack notification failed: {exc}"
+        )
 
     return db_analysis
 
