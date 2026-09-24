@@ -44,18 +44,17 @@ def api_get(path):
     try:
         response = requests.get(
             f"{API_URL}{path}",
-            timeout=15
+            headers=auth_headers(),
+            timeout=20
         )
 
         response.raise_for_status()
-
         return response.json()
 
     except requests.RequestException as exc:
         st.error(
             f"API request failed: {exc}"
         )
-
         return None
 
 
@@ -63,15 +62,13 @@ def api_post(
     path,
     payload=None,
     headers=None,
-    timeout=120
+    timeout=180
 ):
     try:
         request_headers = auth_headers()
 
         if headers:
-            request_headers.update(
-                headers
-            )
+            request_headers.update(headers)
 
         response = requests.post(
             f"{API_URL}{path}",
@@ -91,7 +88,6 @@ def api_post(
         st.error(
             f"API request failed: {exc}"
         )
-
         return None
 
 
@@ -100,18 +96,17 @@ def api_patch(path, payload):
         response = requests.patch(
             f"{API_URL}{path}",
             json=payload,
-            timeout=15
+            headers=auth_headers(),
+            timeout=20
         )
 
         response.raise_for_status()
-
         return response.json()
 
     except requests.RequestException as exc:
         st.error(
             f"API request failed: {exc}"
         )
-
         return None
 
 
