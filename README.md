@@ -1,368 +1,63 @@
 # 🚨 AI Incident Response Copilot
 
-**Evidence-grounded incident triage, diagnosis, and response orchestration.**
+> ⚠️ This project runs locally using Docker. The screenshots below demonstrate the fully working incident-response workflow with AI analysis, RAG evidence retrieval, webhook ingestion, and Slack alerts.
 
-AI Incident Response Copilot is a full-stack incident-management prototype that combines **FastAPI, OpenAI, Retrieval-Augmented Generation (RAG), webhooks, Slack alerts, Streamlit, automated tests, and Docker**.
+## 🚀 Overview
 
-The system can ingest operational alerts, retrieve relevant internal runbooks, generate evidence-grounded AI troubleshooting guidance, track incidents through their lifecycle, prevent duplicate webhook events, and notify engineers through Slack.
+A production-style AI-assisted incident response platform built with **FastAPI, OpenAI, RAG, Streamlit, Slack, and Docker**.
 
-The project explores how generative AI can support incident-response workflows while remaining conservative about uncertainty and avoiding unsupported root-cause claims.
+The system simulates a real operational workflow where monitoring alerts are ingested, analyzed against internal runbooks, stored as incidents, and surfaced to engineers through a dashboard and Slack.
+
+This project demonstrates:
+
+- AI-assisted incident triage
+- Evidence-grounded root-cause analysis
+- Retrieval-Augmented Generation (RAG)
+- Incident lifecycle management
+- Monitoring webhook ingestion
+- Duplicate alert protection
+- Slack incident notifications
+- API authentication
+- Automated testing
+- Docker-based deployment
 
 ---
 
-## Overview
+## 🧱 System Architecture
 
 ```text
-Monitoring / APM Alert
-        │
-        ▼
+Monitoring / APM
+       │
+       ▼
 Webhook Ingestion
-        │
-        ▼
-Authentication + Deduplication
-        │
-        ▼
-Incident Creation
-        │
-        ▼
-RAG Evidence Retrieval
-        │
-        ▼
-OpenAI Structured Analysis
-        │
-        ├──────────────► SQLite Analysis History
-        │
-        ├──────────────► Streamlit Dashboard
-        │
-        └──────────────► Slack Alert
-```
-
----
-
-## Key Features
-
-### Incident Management
-
-- Create, retrieve, update, and delete incidents
-- Severity levels:
-  - Low
-  - Medium
-  - High
-  - Critical
-- Status lifecycle:
-  - Open
-  - Investigating
-  - Resolved
-- Persistent storage using SQLAlchemy and SQLite
-- Analysis history for every incident
-
-### AI-Assisted Investigation
-
-The system uses the OpenAI Responses API to produce structured incident analysis.
-
-Each analysis contains:
-
-- incident summary
-- root-cause hypothesis
-- confidence score
-- ordered troubleshooting steps
-- recommended next action
-
-The model is instructed to distinguish known evidence from hypotheses and avoid inventing telemetry that was not supplied.
-
----
-
-## Retrieval-Augmented Generation
-
-Before an AI analysis is generated, the system searches internal troubleshooting documentation for relevant evidence.
-
-Current example runbooks include:
-
-```text
-docs/runbooks/
-├── payment-api.md
-├── authentication.md
-└── service-latency.md
-```
-
-The retrieval pipeline uses TF-IDF and cosine similarity to identify the most relevant document sections.
-
-```text
-Incident
-   │
-   ▼
-Query Generation
-   │
-   ▼
-TF-IDF Retrieval
-   │
-   ▼
-Top Relevant Runbook Sections
-   │
-   ▼
-OpenAI Analysis
-   │
-   ▼
-Evidence-Grounded Diagnosis
-```
-
-Retrieved evidence is also displayed directly in the dashboard so users can inspect what documentation influenced the investigation.
-
----
-
-## Evidence-Aware AI Design
-
-A core design principle of the project is:
-
-```text
-Runbook guidance ≠ Observed telemetry ≠ Confirmed root cause
-```
-
-A runbook may describe database connection-pool exhaustion as a possible cause of HTTP 500 errors, but the AI must not claim that exhaustion is confirmed unless incident-specific evidence supports it.
-
-The AI is instructed to:
-
-- avoid inventing logs, metrics, traces, or deployments
-- distinguish facts from hypotheses
-- remain conservative when evidence is incomplete
-- reduce confidence when direct telemetry is unavailable
-- prioritize evidence collection
-- recommend reversible actions before disruptive actions
-- treat retrieved runbooks as guidance rather than proof
-
----
-
-## Webhook Ingestion
-
-External monitoring systems can automatically create incidents through:
-
-```http
-POST /webhooks/incidents
-```
-
-Example payload:
-
-```json
-{
-  "source": "production-apm",
-  "external_id": "checkout-alert-001",
-  "title": "Checkout database connection saturation",
-  "description": "Checkout HTTP 500 responses increased while database connection acquisition timeouts were observed.",
-  "severity": "critical",
-  "auto_analyze": true
-}
-```
-
-Webhook ingestion supports:
-
-- source tracking
-- external event IDs
-- shared-secret authentication
-- automatic incident creation
-- automatic AI analysis
-- RAG retrieval
-- duplicate-event protection
-
-Duplicate protection uses the combination:
-
-```text
-source + external_id
-```
-
-If the same external alert is delivered multiple times, the original incident is returned rather than creating duplicates.
-
----
-
-## Slack Alerts
-
-High and critical incidents can automatically trigger Slack notifications.
-
-Slack alerts include:
-
-- incident ID
-- title
-- severity
-- current status
-- AI confidence
-- root-cause hypothesis
-- recommended action
-- dashboard link
-
-Example workflow:
-
-```text
-Critical Alert
-     │
-     ▼
-FastAPI Webhook
-     │
-     ▼
-Incident Created
-     │
-     ▼
+       │
+       ▼
+FastAPI
+       │
+       ├──────────────► Incident Database
+       │
+       ▼
 RAG Retrieval
-     │
-     ▼
-AI Analysis
-     │
-     ▼
-Analysis Saved
-     │
-     ▼
-Slack Notification
+       │
+       ▼
+Internal Runbooks
+       │
+       ▼
+OpenAI Analysis
+       │
+       ├──────────────► Streamlit Dashboard
+       │
+       └──────────────► Slack Alerts
 ```
-
-Slack notification failures are isolated so they do not interrupt the main incident-processing workflow.
 
 ---
 
-## API Authentication
-
-Protected incident endpoints require:
-
-```http
-X-API-Key: <application-api-key>
-```
-
-External monitoring webhooks use a separate secret:
-
-```http
-X-Webhook-Secret: <webhook-secret>
-```
-
-This separation prevents monitoring integrations from automatically receiving access to normal incident-management endpoints.
-
-Sensitive credentials are stored using environment variables and are excluded from version control.
-
----
-
-## Streamlit Operations Dashboard
-
-The dashboard provides an operator-facing interface for managing incidents.
-
-Features include:
-
-- operational incident metrics
-- total incident count
-- open incident count
-- investigating incident count
-- critical incident count
-- incident queue
-- severity filtering
-- status filtering
-- incident details
-- status updates
-- manual AI analysis
-- RAG evidence inspection
-- AI confidence scores
-- root-cause hypotheses
-- troubleshooting steps
-- recommended actions
-- analysis history
-- incident creation
-- webhook simulation
-
-The interface is designed around a simple incident-response workflow rather than a conversational chatbot.
-
----
-
-## Architecture
+## 📁 Project Structure
 
 ```text
-┌──────────────────────────────┐
-│       Monitoring / APM       │
-│      External Systems        │
-└──────────────┬───────────────┘
-               │
-               │ Webhook
-               ▼
-┌──────────────────────────────┐
-│           FastAPI            │
-│          REST API            │
-└──────────────┬───────────────┘
-               │
-      ┌────────┼─────────┐
-      │        │         │
-      ▼        ▼         ▼
- Incident    RAG      Webhook
-   CRUD    Retrieval  Handling
-      │        │         │
-      │        ▼         │
-      │   Internal       │
-      │   Runbooks       │
-      │        │         │
-      │        ▼         │
-      │  OpenAI Analysis │
-      │        │         │
-      └────────┼─────────┘
-               │
-        ┌──────┴──────┐
-        │             │
-        ▼             ▼
-      SQLite         Slack
- Incident History    Alerts
-        │
-        ▼
-┌──────────────────────────────┐
-│     Streamlit Dashboard      │
-└──────────────────────────────┘
-```
-
----
-
-## Technology Stack
-
-### Backend
-
-- Python 3.11
-- FastAPI
-- SQLAlchemy
-- Pydantic
-- SQLite
-- Uvicorn
-
-### AI and Retrieval
-
-- OpenAI Responses API
-- Structured Outputs
-- Retrieval-Augmented Generation
-- TF-IDF
-- cosine similarity
-- scikit-learn
-
-### Frontend
-
-- Streamlit
-- Requests
-
-### Integrations
-
-- Slack Incoming Webhooks
-- Generic monitoring webhooks
-
-### Testing
-
-- pytest
-- FastAPI TestClient
-- HTTPX
-- isolated SQLite test database
-- mocked AI analysis
-
-### Infrastructure
-
-- Docker
-- Docker Compose
-- persistent Docker volumes
-
----
-
-## Project Structure
-
-```text
-ai-incident-copilot/
+ai-incident-response-copilot/
 │
 ├── app/
-│   ├── __init__.py
 │   ├── main.py
 │   ├── database.py
 │   ├── models.py
@@ -398,8 +93,7 @@ ai-incident-copilot/
 │   ├── test_rag.py
 │   └── test_webhooks.py
 │
-├── .dockerignore
-├── .gitignore
+├── images/
 ├── Dockerfile
 ├── docker-compose.yml
 ├── pytest.ini
@@ -409,122 +103,203 @@ ai-incident-copilot/
 
 ---
 
-## API Overview
+## 📊 Incident Operations Dashboard
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| `GET` | `/health` | API health check |
-| `GET` | `/incidents` | List incidents |
-| `POST` | `/incidents` | Create an incident |
-| `GET` | `/incidents/{id}` | Retrieve an incident |
-| `PATCH` | `/incidents/{id}` | Update incident status/details |
-| `DELETE` | `/incidents/{id}` | Delete an incident |
-| `GET` | `/incidents/{id}/evidence` | Retrieve relevant RAG evidence |
-| `POST` | `/incidents/{id}/analyze` | Run AI investigation |
-| `GET` | `/incidents/{id}/analyses` | Retrieve analysis history |
-| `POST` | `/webhooks/incidents` | Receive external monitoring alert |
+The Streamlit dashboard provides a centralized incident-response workspace.
 
-Interactive API documentation is available through FastAPI Swagger UI:
+### Key Features
 
-```text
-http://localhost:8000/docs
-```
+- Total / Open / Investigating / Critical incident metrics
+- Incident queue
+- Severity filtering
+- Status filtering
+- Incident lifecycle management
+- AI analysis controls
+- Evidence inspection
+- Analysis history
+
+![Incident Dashboard](images/dashboard_overview.png)
 
 ---
 
-## Running Locally
+## 🤖 AI Incident Investigation
 
-### 1. Clone the repository
+Each incident can be analyzed using the OpenAI Responses API.
 
-```bash
-git clone <YOUR_REPOSITORY_URL>
-cd ai-incident-copilot
-```
+The AI returns a structured response containing:
 
-### 2. Create a virtual environment
+- Incident summary
+- Likely root-cause hypothesis
+- Confidence score
+- Troubleshooting steps
+- Recommended action
 
-```bash
-python -m venv .venv
-```
-
-On Windows Git Bash:
-
-```bash
-source .venv/Scripts/activate
-```
-
-On macOS/Linux:
-
-```bash
-source .venv/bin/activate
-```
-
-### 3. Install dependencies
-
-```bash
-python -m pip install -r requirements.txt
-```
-
-### 4. Configure environment variables
-
-Create a local `.env` file:
-
-```env
-DATABASE_URL=sqlite:///./incidents.db
-
-OPENAI_API_KEY=your-openai-api-key
-OPENAI_MODEL=your-openai-model
-
-APP_API_KEY=your-application-api-key
-WEBHOOK_SECRET=your-webhook-secret
-
-SLACK_ALERTS_ENABLED=true
-SLACK_WEBHOOK_URL=your-slack-webhook-url
-
-DASHBOARD_URL=http://localhost:8501
-```
-
-Never commit `.env` to Git.
-
-### 5. Start FastAPI
-
-```bash
-uvicorn app.main:app --reload
-```
-
-FastAPI:
+Example:
 
 ```text
-http://127.0.0.1:8000
+Root Cause Hypothesis:
+Database connection-pool saturation is a plausible cause.
+
+Confidence:
+74%
+
+Recommended Action:
+Inspect pool utilization, connection acquisition timeouts,
+and long-running database queries before changing configuration.
 ```
 
-Swagger:
+The model is instructed not to invent logs, metrics, or infrastructure details that were not supplied.
 
-```text
-http://127.0.0.1:8000/docs
-```
-
-### 6. Start Streamlit
-
-In a second terminal:
-
-```bash
-streamlit run frontend/dashboard.py
-```
-
-Dashboard:
-
-```text
-http://localhost:8501
-```
+![AI Investigation](images/ai_investigation.png)
 
 ---
 
-## Running with Docker
+## 📚 RAG Evidence Retrieval
 
-The easiest way to run the complete application is Docker Compose.
+Before generating an AI diagnosis, the application retrieves relevant internal runbook sections.
 
-Build and start:
+Current runbooks cover:
+
+- Payment API failures
+- Database connection-pool exhaustion
+- Authentication failures
+- Authentication latency
+- General API latency
+
+Example flow:
+
+```text
+Incident Description
+        │
+        ▼
+TF-IDF Search
+        │
+        ▼
+Relevant Runbook Sections
+        │
+        ▼
+OpenAI Analysis
+```
+
+The retrieved documents are treated as **investigation guidance**, not proof of a root cause.
+
+This distinction prevents the AI from turning generic documentation into unsupported conclusions.
+
+![RAG Evidence](images/rag_evidence.png)
+
+---
+
+## 📡 Webhook Incident Ingestion
+
+External monitoring systems can create incidents through:
+
+```text
+POST /webhooks/incidents
+```
+
+Example alert:
+
+```json
+{
+  "source": "production-apm",
+  "external_id": "checkout-alert-001",
+  "title": "Checkout database connection saturation",
+  "description": "HTTP 500 responses increased while connection acquisition timeouts were observed.",
+  "severity": "critical",
+  "auto_analyze": true
+}
+```
+
+Webhook processing includes:
+
+- Shared-secret authentication
+- Source tracking
+- External event IDs
+- Incident creation
+- Automatic AI analysis
+- Duplicate alert protection
+
+The combination of:
+
+```text
+source + external_id
+```
+
+is used to prevent duplicate incidents.
+
+---
+
+## 💬 Slack Incident Alerts
+
+High and critical incidents automatically generate Slack notifications.
+
+Alerts include:
+
+- Incident ID
+- Severity
+- Status
+- AI confidence
+- Root-cause hypothesis
+- Recommended action
+
+Example workflow:
+
+```text
+Critical Monitoring Alert
+          │
+          ▼
+      FastAPI
+          │
+          ▼
+      RAG Search
+          │
+          ▼
+     AI Analysis
+          │
+          ▼
+      Slack Alert
+```
+
+![Slack Alert](images/slack_alert.png)
+
+---
+
+## 🔐 API Security
+
+Incident-management endpoints are protected using:
+
+```text
+X-API-Key
+```
+
+Monitoring webhook ingestion uses a separate:
+
+```text
+X-Webhook-Secret
+```
+
+Sensitive credentials such as:
+
+- OpenAI API key
+- Slack webhook URL
+- Application API key
+- Monitoring webhook secret
+
+are stored in `.env` and excluded from Git.
+
+---
+
+## 🐳 Container Infrastructure
+
+The complete application runs using Docker Compose.
+
+Running services:
+
+- FastAPI backend
+- Streamlit dashboard
+- Persistent SQLite storage
+
+Start the stack:
 
 ```bash
 docker compose up -d --build
@@ -536,7 +311,7 @@ Dashboard:
 http://localhost:8501
 ```
 
-API documentation:
+FastAPI / Swagger:
 
 ```text
 http://localhost:8000/docs
@@ -556,31 +331,21 @@ Expected response:
 }
 ```
 
-View running containers:
-
-```bash
-docker compose ps
-```
-
-View logs:
-
-```bash
-docker compose logs -f
-```
-
-Stop the application:
+Stop the stack:
 
 ```bash
 docker compose down
 ```
 
-The SQLite database is stored in a persistent Docker volume so incidents survive container restarts.
+The SQLite database is stored using a persistent Docker volume so incident data survives container restarts.
 
 ---
 
-## Automated Tests
+## 🧪 Automated Testing
 
-Run the complete test suite with:
+The backend includes automated tests using `pytest`.
+
+Run:
 
 ```bash
 python -m pytest -v
@@ -592,33 +357,30 @@ Current result:
 15 passed
 ```
 
-The tests cover:
+Test coverage includes:
 
-- health endpoint
-- missing API key
-- invalid API key
-- incident creation
-- incident retrieval
-- incident update
-- incident deletion
-- missing incident handling
+- API health
+- API authentication
+- Incident creation
+- Incident retrieval
+- Incident updates
+- Incident deletion
+- Missing incident handling
 - RAG retrieval
-- evidence schema
-- mocked AI analysis
-- analysis persistence
-- webhook authentication
-- webhook incident creation
-- webhook idempotency
+- Evidence schema
+- AI analysis
+- Analysis persistence
+- Webhook authentication
+- Webhook ingestion
+- Duplicate event protection
 
-OpenAI calls are mocked during automated tests, so running the test suite does not consume API credits.
-
-Slack notifications are also disabled during testing.
+OpenAI calls are mocked during testing, so the test suite does not consume API credits.
 
 ---
 
-## Simulating Incidents
+## 🚨 Incident Simulation
 
-The project contains a simulation script that creates multiple realistic incident types.
+A simulation script generates realistic operational incidents.
 
 Run:
 
@@ -626,320 +388,147 @@ Run:
 python scripts/simulate_incidents.py
 ```
 
-Example simulated incidents include:
+Example incidents:
 
 ```text
 CRITICAL  Production checkout HTTP 500 spike
+CRITICAL  Checkout failures after deployment
+HIGH      Orders API latency degradation
 HIGH      Authentication latency and login failures
-HIGH      Orders API severe latency degradation
-CRITICAL  Checkout failures after application deployment
-MEDIUM    Intermittent inventory synchronization failures
+MEDIUM    Inventory synchronization failures
 ```
 
-These scenarios demonstrate how the RAG system behaves differently depending on the available evidence.
-
-For example, a vague inventory incident should produce a conservative diagnosis, while an incident containing connection acquisition timeouts and near-saturated database pools can justify a stronger database-related hypothesis.
+The scenarios demonstrate how AI confidence changes depending on the evidence available.
 
 ---
 
-## Example AI Analysis
+## ⚙️ How It Works
 
-Example structured response:
-
-```json
-{
-  "incident_id": 8,
-  "summary": "Checkout HTTP 500 responses increased while database connection acquisition timeouts were observed.",
-  "likely_root_cause": "Database connection-pool saturation is the leading hypothesis based on the available evidence.",
-  "confidence": 0.74,
-  "troubleshooting_steps": [
-    "Inspect current database connection-pool utilization",
-    "Review connection acquisition timeout logs",
-    "Inspect slow and long-running database queries",
-    "Compare pool utilization with the last healthy period",
-    "Review recent application or database configuration changes"
-  ],
-  "recommended_action": "Collect database telemetry and identify the source of connection saturation before modifying pool configuration."
-}
-```
-
-The confidence value varies depending on the incident evidence supplied.
+1. A monitoring system detects an operational issue
+2. The monitoring system sends a webhook to FastAPI
+3. The webhook secret is validated
+4. Duplicate external events are detected
+5. A new incident is created
+6. Relevant internal runbooks are retrieved
+7. Retrieved evidence is supplied to OpenAI
+8. OpenAI generates structured incident analysis
+9. The analysis is stored in SQLite
+10. The dashboard displays the incident and evidence
+11. High / critical incidents generate Slack notifications
+12. Engineers investigate and update the incident status
 
 ---
 
-## Example RAG Evidence
+## 🧠 Evidence-Grounded AI
 
-For a checkout HTTP 500 incident, the retrieval system may return:
+A key design principle of this project is:
 
 ```text
-Source:
-runbooks/payment-api.md
-
-Section:
-HTTP 500 Error Spike
+Runbook Guidance
+      ≠
+Observed Telemetry
+      ≠
+Confirmed Root Cause
 ```
 
-and:
+The AI is instructed to:
 
-```text
-Source:
-runbooks/payment-api.md
+- distinguish facts from hypotheses
+- avoid inventing telemetry
+- lower confidence when evidence is limited
+- prioritize evidence collection
+- recommend reversible actions
+- avoid declaring an unsupported root cause
 
-Section:
-Database Connection Pool Exhaustion
-```
-
-The AI receives these documents as investigation guidance.
-
-The system explicitly prevents the model from treating retrieved documentation as direct evidence that the failure mode is occurring.
+This makes the system a **decision-support tool** rather than an autonomous incident-resolution system.
 
 ---
 
-## Example End-to-End Workflow
+## 🧪 Environment
 
-```text
-1. Monitoring system detects elevated checkout HTTP 500 errors.
+This project was developed and tested locally using:
 
-2. Monitoring system sends:
-   POST /webhooks/incidents
+- Python 3.11
+- FastAPI
+- SQLAlchemy
+- SQLite
+- OpenAI Responses API
+- scikit-learn
+- Streamlit
+- Slack Incoming Webhooks
+- pytest
+- Docker Desktop
+- Docker Compose
 
-3. FastAPI validates the webhook secret.
-
-4. The external event ID is checked for duplicates.
-
-5. A new incident is stored.
-
-6. RAG searches internal runbooks.
-
-7. Relevant evidence is supplied to the OpenAI model.
-
-8. OpenAI returns structured analysis.
-
-9. The analysis is persisted.
-
-10. The Streamlit dashboard displays:
-    - incident information
-    - retrieved evidence
-    - confidence
-    - root-cause hypothesis
-    - troubleshooting steps
-    - recommended action
-
-11. If severity is HIGH or CRITICAL,
-    Slack receives an operational alert.
-```
+All screenshots in this repository were captured from the fully working local environment.
 
 ---
 
-## Security
+## 🧠 Skills Demonstrated
 
-The project includes several security controls appropriate for a prototype:
-
-- `.env` is excluded from Git
-- OpenAI keys are never stored in source code
-- Slack webhook URLs are treated as secrets
-- normal incident endpoints require an application API key
-- webhook ingestion uses a separate webhook secret
-- secrets are compared using constant-time comparison
-- test credentials are isolated from production credentials
-- Docker secrets are loaded at runtime
-- SQLite databases are excluded from Git
-- virtual environments are excluded from Git
-
-Before publishing or deploying the project, all exposed development credentials should be rotated.
-
----
-
-## Design Decisions
-
-### Why FastAPI?
-
-FastAPI provides:
-
-- type-safe request validation
-- automatic OpenAPI generation
-- Swagger documentation
-- dependency injection
-- lightweight REST API development
-
-### Why Streamlit?
-
-Streamlit allows the project to provide an operator-facing interface without requiring a separate JavaScript frontend framework.
-
-The focus of the project is the incident-response architecture and AI workflow rather than frontend engineering.
-
-### Why RAG?
-
-Sending only the incident description to an LLM can encourage generic troubleshooting advice.
-
-Retrieving relevant internal runbooks provides domain context and allows the model to produce more targeted investigation guidance.
-
-### Why TF-IDF instead of a vector database?
-
-The current knowledge base is intentionally small.
-
-TF-IDF provides:
-
-- deterministic retrieval
-- low infrastructure complexity
-- easy debugging
-- interpretable relevance scores
-
-The retrieval layer can later be replaced with embeddings and a vector database without changing the surrounding API architecture.
-
-### Why structured AI outputs?
-
-Structured JSON responses make AI analysis easier to:
-
-- validate
-- persist
-- test
-- display
-- integrate with other systems
-
-This is more reliable for operational software than parsing free-form model responses.
-
-### Why separate webhook and application authentication?
-
-External monitoring systems only need permission to submit alerts.
-
-They should not automatically receive permission to:
-
-- update incidents
-- delete incidents
-- retrieve analysis history
-- trigger arbitrary AI operations
-
-Using separate secrets reduces unnecessary access.
+- Python backend development
+- REST API design
+- FastAPI
+- SQLAlchemy
+- API authentication
+- Webhook integrations
+- Generative AI integration
+- Structured LLM outputs
+- Retrieval-Augmented Generation
+- Evidence grounding
+- Incident-response workflows
+- Slack integrations
+- Automated testing
+- Docker / Docker Compose
+- Persistent storage
+- Operations dashboard development
+- Secure secret handling
 
 ---
 
-## Current Limitations
-
-This project is a portfolio prototype rather than a production incident-management platform.
-
-Current limitations include:
-
-- SQLite rather than a distributed production database
-- local TF-IDF retrieval rather than a vector database
-- synchronous AI processing
-- basic API-key authentication
-- no multi-user RBAC
-- no real infrastructure telemetry connection
-- Slack notifications are outbound only
-- no distributed worker queue
-
----
-
-## Future Improvements
-
-Potential extensions include:
+## 🔮 Future Improvements
 
 - PostgreSQL
-- embeddings and vector database retrieval
+- Semantic embeddings / vector database
 - Prometheus integration
 - Grafana integration
 - Datadog integration
-- PagerDuty integration
-- real-time log ingestion
-- traces and metrics ingestion
-- background task queues
-- Redis
-- user accounts
-- role-based access control
-- interactive Slack buttons
-- incident acknowledgement from Slack
-- automated postmortem generation
-- service dependency graphs
+- PagerDuty alerts
+- Live metrics and log ingestion
+- Distributed background workers
+- Role-based access control
+- Interactive Slack acknowledgement buttons
+- Automatic incident postmortems
+- Service dependency mapping
 - Kubernetes deployment
 - GitHub Actions CI/CD
-- cloud deployment
+- Cloud deployment
 
 ---
 
-## Testing Philosophy
+## 👤 Author
 
-External systems should not be required for the test suite.
+**Igor Moreira**
 
-The automated tests therefore use:
-
-```text
-OpenAI     → mocked
-Slack      → disabled
-Database   → isolated test SQLite database
-FastAPI    → TestClient
-```
-
-This keeps tests:
-
-- fast
-- repeatable
-- inexpensive
-- independent of external service availability
+GitHub: [@igornoc](https://github.com/igornoc)
 
 ---
 
-## Project Motivation
+## 📌 Project Purpose
 
-Incident response is a useful example of where generative AI can add value without replacing human decision-making.
+This project was built as a practical portfolio demonstration of how modern AI systems can support operational incident response.
 
-The project focuses on the question:
-
-> How can AI help engineers investigate operational incidents while remaining transparent about uncertainty and evidence?
-
-The system therefore emphasizes:
-
-```text
-Evidence
-   ↓
-Retrieval
-   ↓
-Hypothesis
-   ↓
-Confidence
-   ↓
-Recommended Investigation
-   ↓
-Human Decision
-```
-
-rather than:
+The focus is not simply generating AI text, but building a complete workflow around:
 
 ```text
 Alert
-   ↓
-AI declares root cause
+  ↓
+Evidence
+  ↓
+AI Investigation
+  ↓
+Human Decision
+  ↓
+Operational Response
 ```
-
-The goal is decision support, not autonomous operational control.
-
----
-
-## Portfolio Highlights
-
-This project demonstrates practical experience with:
-
-- REST API design
-- backend architecture
-- relational persistence
-- API authentication
-- webhook integrations
-- event-driven workflows
-- generative AI
-- structured model outputs
-- retrieval-augmented generation
-- evidence grounding
-- Slack integrations
-- automated testing
-- mocking external services
-- Docker
-- Docker Compose
-- frontend/dashboard development
-- security-conscious secret handling
-
----
-
-## License
-
-This project was created as an educational and portfolio demonstration.
 
