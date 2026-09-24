@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -13,6 +15,9 @@ from app.database import get_db
 from app.services.ai_service import analyze_incident
 from app.services.rag_service import retrieve_incident_evidence
 from app.services.slack_service import send_incident_alert
+
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(
@@ -184,9 +189,21 @@ def analyze_incident_endpoint(
         db
     )
 
-    analysis_data = analyze_incident(
-        incident
-    )
+    try:
+        analysis_data = analyze_incident(
+            incident
+        )
+    except Exception:
+        logger.exception(
+            "AI analysis failed for incident %s",
+            incident_id
+        )
+
+        # Do not leak provider error details to the client.
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI analysis failed. Please try again."
+        )
 
     db_analysis = models.IncidentAnalysis(
         **analysis_data
@@ -201,9 +218,10 @@ def analyze_incident_endpoint(
             incident,
             db_analysis
         )
-    except Exception as exc:
-        print(
-            f"Slack notification failed: {exc}"
+    except Exception:
+        logger.exception(
+            "Slack notification failed for incident %s",
+            incident_id
         )
 
     return db_analysis

@@ -1,7 +1,16 @@
-from fastapi import FastAPI
+import logging
+
+from fastapi import FastAPI, HTTPException
+from sqlalchemy import text
 
 from app.database import Base, engine
 from app.routers import incidents, webhooks
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+)
 
 
 Base.metadata.create_all(
@@ -41,6 +50,17 @@ def root():
 
 @app.get("/health")
 def health_check():
+    # Report unhealthy if the database is unreachable, so Docker or a
+    # load balancer can detect a broken instance.
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Database unavailable"
+        )
+
     return {
         "status": "ok"
     }

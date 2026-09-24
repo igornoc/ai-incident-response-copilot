@@ -7,6 +7,39 @@ from dotenv import load_dotenv
 load_dotenv(dotenv_path=".env")
 
 
+# Slack rejects section text longer than 3000 characters. The title and
+# description share one section, so together they stay below that.
+SLACK_TEXT_LIMIT = 2700
+SLACK_TITLE_LIMIT = 250
+
+
+def slack_escape(value, limit: int = SLACK_TEXT_LIMIT) -> str:
+    """Make untrusted text safe for Slack mrkdwn and short enough to send.
+
+    Incident text comes from webhooks and LLM output. Without escaping,
+    text like "<https://evil.example|Open runbook>" renders as a disguised
+    link, and "<!channel>" pings everyone in the channel.
+    """
+    text = (
+        str(value)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+    if len(text) <= limit:
+        return text
+
+    text = text[: limit - 1]
+
+    # Don't leave half of an escape sequence such as "&am" at the end.
+    last_amp = text.rfind("&")
+    if last_amp != -1 and ";" not in text[last_amp:]:
+        text = text[:last_amp]
+
+    return text + "…"
+
+
 def _alerts_enabled() -> bool:
     value = os.getenv(
         "SLACK_ALERTS_ENABLED",
@@ -61,19 +94,25 @@ def send_incident_alert(
             f"{round(analysis.confidence * 100)}%"
         )
 
-        hypothesis = (
+        hypothesis = slack_escape(
             analysis.likely_root_cause
         )
 
-        action = (
+        action = slack_escape(
             analysis.recommended_action
         )
+
+    title = slack_escape(
+        incident.title,
+        limit=SLACK_TITLE_LIMIT
+    )
+    description = slack_escape(incident.description)
 
     payload = {
         "text": (
             f"{emoji} "
             f"{incident.severity.upper()} "
-            f"incident: {incident.title}"
+            f"incident: {title}"
         ),
         "blocks": [
             {
@@ -93,8 +132,8 @@ def send_incident_alert(
                 "text": {
                     "type": "mrkdwn",
                     "text": (
-                        f"*{incident.title}*\n"
-                        f"{incident.description}"
+                        f"*{title}*\n"
+                        f"{description}"
                     )
                 }
             },

@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -6,6 +8,7 @@ from fastapi import (
     status,
 )
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -15,10 +18,75 @@ from app.services.webhook_service import verify_webhook_secret
 from app.services.slack_service import send_incident_alert
 
 
+logger = logging.getLogger(__name__)
+
+
 router = APIRouter(
     prefix="/webhooks",
     tags=["Webhooks"]
 )
+
+
+def find_existing_event(
+    db: Session,
+    source: str,
+    external_id: str
+):
+    return (
+        db.query(models.WebhookEvent)
+        .filter(
+            models.WebhookEvent.source
+            == source,
+            models.WebhookEvent.external_id
+            == external_id
+        )
+        .first()
+    )
+
+
+def duplicate_response(
+    db: Session,
+    existing_event: models.WebhookEvent
+) -> schemas.WebhookIngestResponse:
+    incident = (
+        db.query(models.Incident)
+        .filter(
+            models.Incident.id
+            == existing_event.incident_id
+        )
+        .first()
+    )
+
+    latest_analysis = (
+        db.query(models.IncidentAnalysis)
+        .filter(
+            models.IncidentAnalysis.incident_id
+            == incident.id
+        )
+        .order_by(
+            models.IncidentAnalysis.created_at.desc()
+        )
+        .first()
+    )
+
+    return schemas.WebhookIngestResponse(
+        duplicate=True,
+        event_id=existing_event.id,
+        source=existing_event.source,
+        external_id=existing_event.external_id,
+        incident=(
+            schemas.IncidentResponse.model_validate(
+                incident
+            )
+        ),
+        analysis=(
+            schemas.AIAnalysisResponse.model_validate(
+                latest_analysis
+            )
+            if latest_analysis
+            else None
+        )
+    )
 
 
 @router.post(
@@ -42,20 +110,15 @@ def receive_incident_webhook(
             detail="Invalid webhook secret"
         )
 
-    existing_event = (
-        db.query(models.WebhookEvent)
-        .filter(
-            models.WebhookEvent.source
-            == payload.source,
-            models.WebhookEvent.external_id
-            == payload.external_id
-        )
-        .first()
+    existing_event = find_existing_event(
+        db,
+        payload.source,
+        payload.external_id
     )
 
     if existing_event:
-        incident = (
-            db.query(models.Incident)
+        incident_exists = (
+            db.query(models.Incident.id)
             .filter(
                 models.Incident.id
                 == existing_event.incident_id
@@ -63,36 +126,17 @@ def receive_incident_webhook(
             .first()
         )
 
-        latest_analysis = (
-            db.query(models.IncidentAnalysis)
-            .filter(
-                models.IncidentAnalysis.incident_id
-                == incident.id
+        if incident_exists:
+            return duplicate_response(
+                db,
+                existing_event
             )
-            .order_by(
-                models.IncidentAnalysis.created_at.desc()
-            )
-            .first()
-        )
 
-        return schemas.WebhookIngestResponse(
-            duplicate=True,
-            event_id=existing_event.id,
-            source=existing_event.source,
-            external_id=existing_event.external_id,
-            incident=(
-                schemas.IncidentResponse.model_validate(
-                    incident
-                )
-            ),
-            analysis=(
-                schemas.AIAnalysisResponse.model_validate(
-                    latest_analysis
-                )
-                if latest_analysis
-                else None
-            )
-        )
+        # Orphaned event (its incident was deleted before cascading
+        # deletes existed). Drop it so the alert is treated as new
+        # instead of crashing.
+        db.delete(existing_event)
+        db.flush()
 
     incident = models.Incident(
         title=payload.title,
@@ -111,34 +155,70 @@ def receive_incident_webhook(
     )
 
     db.add(webhook_event)
-    db.commit()
+
+    try:
+        db.commit()
+    except IntegrityError:
+        # Two identical alerts arrived at the same time and the other
+        # request committed first. Return its incident as a duplicate.
+        db.rollback()
+
+        existing_event = find_existing_event(
+            db,
+            payload.source,
+            payload.external_id
+        )
+
+        if existing_event is None:
+            raise
+
+        return duplicate_response(
+            db,
+            existing_event
+        )
 
     db.refresh(incident)
     db.refresh(webhook_event)
 
     saved_analysis = None
+    analysis_error = None
 
     if payload.auto_analyze:
-        analysis_data = analyze_incident(
-            incident
-        )
+        try:
+            analysis_data = analyze_incident(
+                incident
+            )
+        except Exception:
+            # The incident is already stored; a failed AI call should not
+            # turn the whole webhook into a 500 (the sender would retry and
+            # get a "duplicate" with no analysis ever produced).
+            logger.exception(
+                "AI analysis failed for incident %s",
+                incident.id
+            )
 
-        saved_analysis = models.IncidentAnalysis(
-            **analysis_data
-        )
+            analysis_error = (
+                "AI analysis failed. Retry with "
+                f"POST /incidents/{incident.id}/analyze."
+            )
+        else:
+            saved_analysis = models.IncidentAnalysis(
+                **analysis_data
+            )
 
-        db.add(saved_analysis)
-        db.commit()
-        db.refresh(saved_analysis)
+            db.add(saved_analysis)
+            db.commit()
+            db.refresh(saved_analysis)
 
         try:
             send_incident_alert(
                 incident,
                 saved_analysis
             )
-        except Exception as exc:
-            print(
-                f"Slack notification failed: {exc}"
+        except Exception:
+            logger.exception(
+                "Slack notification failed for incident %s",
+                incident.id
             )
 
     return schemas.WebhookIngestResponse(
@@ -157,5 +237,6 @@ def receive_incident_webhook(
             )
             if saved_analysis
             else None
-        )
+        ),
+        analysis_error=analysis_error
     )

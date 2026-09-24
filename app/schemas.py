@@ -11,6 +11,11 @@ Severity = Literal[
     "critical"
 ]
 
+# Upper bound on free-text fields. Descriptions are sent to the LLM, so an
+# unbounded field lets a single request run up a large API bill.
+MAX_DESCRIPTION_LENGTH = 5000
+
+
 IncidentStatus = Literal[
     "open",
     "investigating",
@@ -25,7 +30,8 @@ class IncidentCreate(BaseModel):
     )
 
     description: str = Field(
-        min_length=5
+        min_length=5,
+        max_length=MAX_DESCRIPTION_LENGTH
     )
 
     severity: Severity
@@ -40,7 +46,8 @@ class IncidentUpdate(BaseModel):
 
     description: str | None = Field(
         default=None,
-        min_length=5
+        min_length=5,
+        max_length=MAX_DESCRIPTION_LENGTH
     )
 
     severity: Severity | None = None
@@ -99,7 +106,8 @@ class WebhookIncidentCreate(BaseModel):
     )
 
     description: str = Field(
-        min_length=5
+        min_length=5,
+        max_length=MAX_DESCRIPTION_LENGTH
     )
 
     severity: Severity
@@ -113,3 +121,4 @@ class WebhookIngestResponse(BaseModel):
     external_id: str
     incident: IncidentResponse
     analysis: AIAnalysisResponse | None = None
+    analysis_error: str | None = None

@@ -12,6 +12,8 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 
+from sqlalchemy.orm import relationship
+
 from app.database import Base
 
 
@@ -51,6 +53,18 @@ class Incident(Base):
         default=lambda: datetime.now(timezone.utc)
     )
 
+    # Deleting an incident also deletes its analyses and webhook events,
+    # so no orphaned rows point at an incident that no longer exists.
+    analyses = relationship(
+        "IncidentAnalysis",
+        cascade="all, delete-orphan"
+    )
+
+    webhook_events = relationship(
+        "WebhookEvent",
+        cascade="all, delete-orphan"
+    )
+
 
 class IncidentAnalysis(Base):
     __tablename__ = "incident_analyses"
@@ -63,7 +77,7 @@ class IncidentAnalysis(Base):
 
     incident_id = Column(
         Integer,
-        ForeignKey("incidents.id"),
+        ForeignKey("incidents.id", ondelete="CASCADE"),
         nullable=False,
         index=True
     )
@@ -119,7 +133,7 @@ class WebhookEvent(Base):
 
     incident_id = Column(
         Integer,
-        ForeignKey("incidents.id"),
+        ForeignKey("incidents.id", ondelete="CASCADE"),
         nullable=False,
         index=True
     )

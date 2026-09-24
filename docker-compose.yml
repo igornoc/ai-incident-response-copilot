@@ -14,8 +14,10 @@ services:
         "8000"
       ]
 
+    # Bound to localhost only: the API must not be reachable from other
+    # machines on the same network (e.g. shared Wi-Fi).
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
 
     env_file:
       - .env
@@ -43,14 +45,18 @@ services:
         "--server.headless=true"
       ]
 
+    # The dashboard has no login of its own, so it is only exposed on
+    # localhost. Put an authenticating reverse proxy in front before
+    # exposing it anywhere else.
     ports:
-      - "8501:8501"
+      - "127.0.0.1:8501:8501"
 
-    env_file:
-      - .env
-
+    # Least privilege: the dashboard only receives the values it needs
+    # (read from .env by Compose), not the OpenAI key or Slack webhook.
     environment:
       API_URL: http://api:8000
+      APP_API_KEY: ${APP_API_KEY}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
 
     depends_on:
       - api

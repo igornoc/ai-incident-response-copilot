@@ -9,11 +9,17 @@ COPY requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Run as an unprivileged user instead of root.
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /app/data \
+    && chown appuser:appuser /app/data
+
 COPY app ./app
 COPY frontend ./frontend
 COPY docs ./docs
-COPY pytest.ini .
 COPY README.md .
+
+USER appuser
 
 EXPOSE 8000
 EXPOSE 8501

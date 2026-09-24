@@ -1,5 +1,7 @@
 # 🚨 AI Incident Response Copilot
 
+![Tests](https://github.com/igornoc/ai-incident-response-copilot/actions/workflows/tests.yml/badge.svg)
+
 > ⚠️ This project runs locally using Docker. The screenshots below demonstrate the fully working incident-response workflow with AI analysis, RAG evidence retrieval, webhook ingestion, and Slack alerts.
 
 ## 🚀 Overview
@@ -287,6 +289,15 @@ Sensitive credentials such as:
 
 are stored in `.env` and excluded from Git.
 
+Additional hardening:
+
+- Docker Compose publishes the API and dashboard on `127.0.0.1` only, so they are not reachable from other machines on the same network
+- The dashboard container only receives the API key and webhook secret, not the OpenAI key or Slack webhook
+- Containers run as a non-root user
+- Incident descriptions are capped at 5,000 characters to bound LLM cost per request
+- Text sent to Slack is escaped, so alert content cannot inject disguised links or `@channel` mentions
+- AI provider errors are logged server-side and never returned to clients
+
 ---
 
 ## 🐳 Container Infrastructure
@@ -354,8 +365,10 @@ python -m pytest -v
 Current result:
 
 ```text
-15 passed
+25 passed
 ```
+
+Tests also run automatically on every push and pull request via GitHub Actions.
 
 Test coverage includes:
 
@@ -372,7 +385,11 @@ Test coverage includes:
 - Analysis persistence
 - Webhook authentication
 - Webhook ingestion
-- Duplicate event protection
+- Duplicate event protection (including simultaneous duplicates)
+- Cascading deletes and webhook retries after deletion
+- Graceful handling of AI provider failures
+- Input size limits
+- Slack output escaping
 
 OpenAI calls are mocked during testing, so the test suite does not consume API credits.
 
@@ -486,6 +503,17 @@ All screenshots in this repository were captured from the fully working local en
 
 ---
 
+## ⚠️ Known Limitations
+
+- The Streamlit dashboard has no login of its own. It is meant to run locally; put an authenticating reverse proxy in front of it before exposing it on a network.
+- A single shared API key is used; there are no per-user accounts or roles.
+- There is no rate limiting on `/incidents/{id}/analyze`, so anyone holding the API key can trigger paid OpenAI calls.
+- Incident text is passed to the LLM, so a crafted alert could attempt prompt injection. Output is treated as a suggestion for a human, never executed.
+- Retrieval uses TF-IDF keyword matching over a small set of runbooks, not semantic search.
+- AI analysis runs synchronously inside the request.
+
+---
+
 ## 🔮 Future Improvements
 
 - PostgreSQL
@@ -495,13 +523,14 @@ All screenshots in this repository were captured from the fully working local en
 - Datadog integration
 - PagerDuty alerts
 - Live metrics and log ingestion
-- Distributed background workers
+- Background workers for AI analysis
+- Rate limiting
 - Role-based access control
 - Interactive Slack acknowledgement buttons
 - Automatic incident postmortems
 - Service dependency mapping
 - Kubernetes deployment
-- GitHub Actions CI/CD
+- Continuous deployment
 - Cloud deployment
 
 ---

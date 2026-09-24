@@ -1,3 +1,4 @@
+from functools import lru_cache
 from pathlib import Path
 
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -77,31 +78,43 @@ def load_knowledge_base() -> list[dict]:
     return chunks
 
 
-def retrieve_evidence(
-    query: str,
-    top_k: int = 3
-) -> list[dict]:
+@lru_cache(maxsize=1)
+def build_index():
+    """Load the runbooks and fit the TF-IDF index once per process.
+
+    Previously every request re-read every file and re-fitted the
+    vectorizer. Restart the API (or call build_index.cache_clear())
+    after editing the runbooks.
+    """
     chunks = load_knowledge_base()
 
     if not chunks:
-        return []
-
-    documents = [
-        chunk["content"]
-        for chunk in chunks
-    ]
+        return [], None, None
 
     vectorizer = TfidfVectorizer(
         stop_words="english",
         ngram_range=(1, 2)
     )
 
-    matrix = vectorizer.fit_transform(
-        documents + [query]
+    document_vectors = vectorizer.fit_transform(
+        [chunk["content"] for chunk in chunks]
     )
 
-    document_vectors = matrix[:-1]
-    query_vector = matrix[-1]
+    return chunks, vectorizer, document_vectors
+
+
+def retrieve_evidence(
+    query: str,
+    top_k: int = 3
+) -> list[dict]:
+    chunks, vectorizer, document_vectors = build_index()
+
+    if not chunks:
+        return []
+
+    query_vector = vectorizer.transform(
+        [query]
+    )
 
     scores = cosine_similarity(
         query_vector,
